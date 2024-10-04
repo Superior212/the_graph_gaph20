@@ -1,63 +1,77 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigInt } from "@graphprotocol/graph-ts";
 import {
   Graph20,
+  Transfer as TransferEvent,
+  Approval as ApprovalEvent,
+  OwnershipTransferred as OwnershipTransferredEvent,
+} from "../generated/Graph20/Graph20";
+import {
+  Token,
+  Account,
+  Transfer,
   Approval,
   OwnershipTransferred,
-  Transfer
-} from "../generated/Graph20/Graph20"
-import { ExampleEntity } from "../generated/schema"
+} from "../generated/schema";
 
-export function handleApproval(event: Approval): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from)
-
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (!entity) {
-    entity = new ExampleEntity(event.transaction.from)
-
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+export function handleTransfer(event: TransferEvent): void {
+  let token = Token.load("1");
+  if (!token) {
+    token = new Token("1");
+    token.name = "ApeReward";
+    token.symbol = "APR";
+    token.decimals = 18;
+    token.totalSupply = BigInt.fromI32(0);
   }
+  token.save();
 
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
+  let fromAccount = Account.load(event.params.from.toHex());
+  if (!fromAccount) {
+    fromAccount = new Account(event.params.from.toHex());
+    fromAccount.balance = BigInt.fromI32(0);
+  }
+  fromAccount.balance = fromAccount.balance.minus(event.params.value);
+  fromAccount.save();
 
-  // Entity fields can be set based on event parameters
-  entity.owner = event.params.owner
-  entity.spender = event.params.spender
+  let toAccount = Account.load(event.params.to.toHex());
+  if (!toAccount) {
+    toAccount = new Account(event.params.to.toHex());
+    toAccount.balance = BigInt.fromI32(0);
+  }
+  toAccount.balance = toAccount.balance.plus(event.params.value);
+  toAccount.save();
 
-  // Entities can be written to the store with `.save()`
-  entity.save()
-
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
-
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.allowance(...)
-  // - contract.approve(...)
-  // - contract.balanceOf(...)
-  // - contract.decimals(...)
-  // - contract.name(...)
-  // - contract.owner(...)
-  // - contract.symbol(...)
-  // - contract.totalSupply(...)
-  // - contract.transfer(...)
-  // - contract.transferFrom(...)
+  let transfer = new Transfer(
+    event.transaction.hash.toHex() + "-" + event.logIndex.toString()
+  );
+  transfer.from = fromAccount.id;
+  transfer.to = toAccount.id;
+  transfer.value = event.params.value;
+  transfer.timestamp = event.block.timestamp;
+  transfer.block = event.block.number;
+  transfer.save();
 }
 
-export function handleOwnershipTransferred(event: OwnershipTransferred): void {}
+export function handleApproval(event: ApprovalEvent): void {
+  let approval = new Approval(
+    event.transaction.hash.toHex() + "-" + event.logIndex.toString()
+  );
+  approval.owner = event.params.owner.toHex();
+  approval.spender = event.params.spender.toHex();
+  approval.value = event.params.value;
+  approval.timestamp = event.block.timestamp;
+  approval.block = event.block.number;
+  approval.save();
+}
 
-export function handleTransfer(event: Transfer): void {}
+export function handleOwnershipTransferred(
+  event: OwnershipTransferredEvent
+): void {
+  let ownershipTransferred = new OwnershipTransferred(
+    event.transaction.hash.toHex() + "-" + event.logIndex.toString()
+  );
+  ownershipTransferred.previousOwner = event.params.previousOwner;
+  ownershipTransferred.newOwner = event.params.newOwner;
+  ownershipTransferred.timestamp = event.block.timestamp;
+  ownershipTransferred.block = event.block.number;
+  ownershipTransferred.save();
+}
